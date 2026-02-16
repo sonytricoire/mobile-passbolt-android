@@ -36,6 +36,9 @@ import com.passbolt.mobile.android.database.snapshot.ResourcesSnapshot
 import com.passbolt.mobile.android.featureflags.usecase.GetFeatureFlagsUseCase
 import com.passbolt.mobile.android.metadata.interactor.MetadataKeysInteractor
 import com.passbolt.mobile.android.metadata.interactor.MetadataSessionKeysInteractor
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 /**
  * Interactor that is responsible for fetching and updating the database for all home screen resources
@@ -53,30 +56,69 @@ class HomeDataInteractor(
     private val resourcesFullRefreshIdlingResource: ResourcesFullRefreshIdlingResource,
     private val resourcesSnapshot: ResourcesSnapshot,
 ) {
-    // TODO start multiple async where possible
     suspend fun refreshAllHomeScreenData(): Output {
         resourcesFullRefreshIdlingResource.setIdle(false)
         resourcesSnapshot.populateForCurrentAccount()
 
         val featureFlagsOutput = featureFlagsUseCase.execute(Unit).featureFlags
-        val metadataKeysOutput =
-            if (featureFlagsOutput.isV5MetadataAvailable) {
-                metadataKeysInteractor.fetchAndSaveMetadataKeys()
-            } else {
-                MetadataKeysInteractor.Output.Success
-            }
-        val metadataSessionKeysOutput =
-            if (featureFlagsOutput.isV5MetadataAvailable) {
-                metadataSessionKeysInteractor.fetchMetadataSessionKeys()
-            } else {
-                MetadataSessionKeysInteractor.Output.Success
-            }
 
-        val resourceTypesOutput = resourceTypesInteractor.fetchAndSaveResourceTypes()
-        val userInteractorOutput = usersInteractor.fetchAndSaveUsers()
-        val groupsRefreshOutput = groupsInteractor.fetchAndSaveGroups()
-        val foldersRefreshOutput = foldersInteractor.fetchAndSaveFolders()
-        val resourcesOutput = resourcesInteractor.fetchAndSaveResources()
+        val (
+            metadataKeysOutput,
+            metadataSessionKeysOutput,
+            resourceTypesOutput,
+            userInteractorOutput,
+            groupsRefreshOutput,
+            foldersRefreshOutput,
+            resourcesOutput,
+        ) =
+            coroutineScope {
+                val metadataKeysDeferred =
+                    async {
+                        if (featureFlagsOutput.isV5MetadataAvailable) {
+                            metadataKeysInteractor.fetchAndSaveMetadataKeys()
+                        } else {
+                            MetadataKeysInteractor.Output.Success
+                        }
+                    }
+                val metadataSessionKeysDeferred =
+                    async {
+                        if (featureFlagsOutput.isV5MetadataAvailable) {
+                            metadataSessionKeysInteractor.fetchMetadataSessionKeys()
+                        } else {
+                            MetadataSessionKeysInteractor.Output.Success
+                        }
+                    }
+                val resourceTypesDeferred =
+                    async {
+                        resourceTypesInteractor.fetchAndSaveResourceTypes()
+                    }
+                val userInteractorDeferred =
+                    async {
+                        usersInteractor.fetchAndSaveUsers()
+                    }
+                val groupsRefreshDeferred =
+                    async {
+                        groupsInteractor.fetchAndSaveGroups()
+                    }
+                val foldersRefreshDeferred =
+                    async {
+                        foldersInteractor.fetchAndSaveFolders()
+                    }
+                val resourcesDeferred =
+                    async {
+                        resourcesInteractor.fetchAndSaveResources()
+                    }
+
+                awaitAll(
+                    metadataKeysDeferred,
+                    metadataSessionKeysDeferred,
+                    resourceTypesDeferred,
+                    userInteractorDeferred,
+                    groupsRefreshDeferred,
+                    foldersRefreshDeferred,
+                    resourcesDeferred,
+                )
+            }
 
         val saveSessionKeysOutput =
             if (featureFlagsOutput.isV5MetadataAvailable) {

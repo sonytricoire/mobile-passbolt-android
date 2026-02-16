@@ -1,0 +1,39 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
+  },
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Read(./**)",
+      "Write(./**)",
+      "Edit(./**)",
+      "Glob(./**)",
+      "Grep(./**)",
+      "Read(/home/user/projects/mobile-passbolt-android/.auto-claude/worktrees/tasks/001-parall-liser-le-chargement-des-donn-es-dans-homeda/**)",
+      "Write(/home/user/projects/mobile-passbolt-android/.auto-claude/worktrees/tasks/001-parall-liser-le-chargement-des-donn-es-dans-homeda/**)",
+      "Edit(/home/user/projects/mobile-passbolt-android/.auto-claude/worktrees/tasks/001-parall-liser-le-chargement-des-donn-es-dans-homeda/**)",
+      "Glob(/home/user/projects/mobile-passbolt-android/.auto-claude/worktrees/tasks/001-parall-liser-le-chargement-des-donn-es-dans-homeda/**)",
+      "Grep(/home/user/projects/mobile-passbolt-android/.auto-claude/worktrees/tasks/001-parall-liser-le-chargement-des-donn-es-dans-homeda/**)",
+      "Read(/home/user/projects/mobile-passbolt-android/.auto-claude/worktrees/tasks/001-parall-liser-le-chargement-des-donn-es-dans-homeda/.auto-claude/specs/001-parall-liser-le-chargement-des-donn-es-dans-homeda/**)",
+      "Write(/home/user/projects/mobile-passbolt-android/.auto-claude/worktrees/tasks/001-parall-liser-le-chargement-des-donn-es-dans-homeda/.auto-claude/specs/001-parall-liser-le-chargement-des-donn-es-dans-homeda/**)",
+      "Edit(/home/user/projects/mobile-passbolt-android/.auto-claude/worktrees/tasks/001-parall-liser-le-chargement-des-donn-es-dans-homeda/.auto-claude/specs/001-parall-liser-le-chargement-des-donn-es-dans-homeda/**)",
+      "Read(/home/user/projects/mobile-passbolt-android/.auto-claude/**)",
+      "Write(/home/user/projects/mobile-passbolt-android/.auto-claude/**)",
+      "Edit(/home/user/projects/mobile-passbolt-android/.auto-claude/**)",
+      "Glob(/home/user/projects/mobile-passbolt-android/.auto-claude/**)",
+      "Grep(/home/user/projects/mobile-passbolt-android/.auto-claude/**)",
+      "Bash(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "mcp__context7__resolve-library-id(*)",
+      "mcp__context7__query-docs(*)",
+      "mcp__graphiti-memory__search_nodes(*)",
+      "mcp__graphiti-memory__search_facts(*)",
+      "mcp__graphiti-memory__add_episode(*)",
+      "mcp__graphiti-memory__get_episodes(*)",
+      "mcp__graphiti-memory__get_entity_edge(*)"
+    ]
+  }
+}
