@@ -62,15 +62,7 @@ class HomeDataInteractor(
 
         val featureFlagsOutput = featureFlagsUseCase.execute(Unit).featureFlags
 
-        val (
-            metadataKeysOutput,
-            metadataSessionKeysOutput,
-            resourceTypesOutput,
-            userInteractorOutput,
-            groupsRefreshOutput,
-            foldersRefreshOutput,
-            resourcesOutput,
-        ) =
+        val results =
             coroutineScope {
                 val metadataKeysDeferred =
                     async {
@@ -119,6 +111,14 @@ class HomeDataInteractor(
                     resourcesDeferred,
                 )
             }
+
+        val metadataKeysOutput = results[0] as MetadataKeysInteractor.Output
+        val metadataSessionKeysOutput = results[1] as MetadataSessionKeysInteractor.Output
+        val resourceTypesOutput = results[2] as ResourceTypesInteractor.Output
+        val userInteractorOutput = results[3] as UsersInteractor.Output
+        val groupsRefreshOutput = results[4] as GroupsInteractor.Output
+        val foldersRefreshOutput = results[5] as FoldersInteractor.Output
+        val resourcesOutput = results[6] as ResourceInteractor.Output
 
         val saveSessionKeysOutput =
             if (featureFlagsOutput.isV5MetadataAvailable) {
