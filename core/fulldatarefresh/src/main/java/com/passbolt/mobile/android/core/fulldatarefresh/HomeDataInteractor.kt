@@ -39,6 +39,7 @@ import com.passbolt.mobile.android.metadata.interactor.MetadataSessionKeysIntera
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import timber.log.Timber
+import kotlinx.coroutines.awaitAll
 
 /**
  * Interactor that is responsible for fetching and updating the database for all home screen resources
@@ -56,30 +57,69 @@ class HomeDataInteractor(
     private val resourcesFullRefreshIdlingResource: ResourcesFullRefreshIdlingResource,
     private val resourcesSnapshot: ResourcesSnapshot,
 ) {
-    /**
-     * Refreshes all home screen data using progressive loading.
-     * Critical data (resource types and resources) is loaded first in parallel,
-     * then secondary data (users, groups, folders, metadata) is loaded.
-     * This allows the UI to become interactive as soon as critical data is available.
-     *
-     * @param onCriticalDataReady Optional callback invoked when critical data has successfully loaded,
-     *                           allowing the caller to emit intermediate state (e.g., CriticalDataReady)
-     */
-    suspend fun refreshAllHomeScreenData(
-        onCriticalDataReady: (suspend () -> Unit)? = null,
-    ): Output {
+    suspend fun refreshAllHomeScreenData(): Output {
         resourcesFullRefreshIdlingResource.setIdle(false)
         resourcesSnapshot.populateForCurrentAccount()
 
-        // Load critical data first (resource types and resources in parallel)
-        val criticalDataOutput = loadCriticalData()
+        val featureFlagsOutput = featureFlagsUseCase.execute(Unit).featureFlags
 
-        // If critical data fails, cleanup and return failure immediately
-        if (criticalDataOutput is Output.Failure) {
-            resourcesSnapshot.clear()
-            resourcesFullRefreshIdlingResource.setIdle(true)
-            return criticalDataOutput
-        }
+        val results =
+            coroutineScope {
+                val metadataKeysDeferred =
+                    async {
+                        if (featureFlagsOutput.isV5MetadataAvailable) {
+                            metadataKeysInteractor.fetchAndSaveMetadataKeys()
+                        } else {
+                            MetadataKeysInteractor.Output.Success
+                        }
+                    }
+                val metadataSessionKeysDeferred =
+                    async {
+                        if (featureFlagsOutput.isV5MetadataAvailable) {
+                            metadataSessionKeysInteractor.fetchMetadataSessionKeys()
+                        } else {
+                            MetadataSessionKeysInteractor.Output.Success
+                        }
+                    }
+                val resourceTypesDeferred =
+                    async {
+                        resourceTypesInteractor.fetchAndSaveResourceTypes()
+                    }
+                val userInteractorDeferred =
+                    async {
+                        usersInteractor.fetchAndSaveUsers()
+                    }
+                val groupsRefreshDeferred =
+                    async {
+                        groupsInteractor.fetchAndSaveGroups()
+                    }
+                val foldersRefreshDeferred =
+                    async {
+                        foldersInteractor.fetchAndSaveFolders()
+                    }
+                val resourcesDeferred =
+                    async {
+                        resourcesInteractor.fetchAndSaveResources()
+                    }
+
+                awaitAll(
+                    metadataKeysDeferred,
+                    metadataSessionKeysDeferred,
+                    resourceTypesDeferred,
+                    userInteractorDeferred,
+                    groupsRefreshDeferred,
+                    foldersRefreshDeferred,
+                    resourcesDeferred,
+                )
+            }
+
+        val metadataKeysOutput = results[0] as MetadataKeysInteractor.Output
+        val metadataSessionKeysOutput = results[1] as MetadataSessionKeysInteractor.Output
+        val resourceTypesOutput = results[2] as ResourceTypesInteractor.Output
+        val userInteractorOutput = results[3] as UsersInteractor.Output
+        val groupsRefreshOutput = results[4] as GroupsInteractor.Output
+        val foldersRefreshOutput = results[5] as FoldersInteractor.Output
+        val resourcesOutput = results[6] as ResourceInteractor.Output
 
         // Critical data succeeded - notify callback so executor can emit CriticalDataReady state
         onCriticalDataReady?.invoke()
