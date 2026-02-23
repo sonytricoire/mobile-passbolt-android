@@ -143,4 +143,44 @@ class FullDataRefreshExecutor(
             )
         }
     }
+
+    /**
+     * Alternative implementation using the callback mechanism.
+     * This demonstrates how to use refreshAllHomeScreenData() with the onCriticalDataReady callback
+     * to emit intermediate states without manually calling loadCriticalData() and loadSecondaryData().
+     */
+    suspend fun susPerformFullDataRefreshWithCallback() {
+        Timber.d("Full data refresh initiated (with callback)")
+        if (!dataRefreshTrackingFlow.isInProgress()) {
+            dataRefreshTrackingFlow.updateStatus(InProgress)
+            Timber.d("Loading critical data (resource types and resources)")
+
+            val output =
+                runAuthenticatedOperation {
+                    homeDataInteractor.refreshAllHomeScreenData(
+                        onCriticalDataReady = {
+                            // Callback invoked when critical data is ready
+                            Timber.d("Critical data refresh completed - UI can become interactive")
+                            dataRefreshTrackingFlow.updateStatus(CriticalDataReady)
+                            Timber.d("Loading secondary data in background")
+                            dataRefreshTrackingFlow.updateStatus(LoadingSecondary)
+                        },
+                    )
+                }
+
+            // Update final status based on overall result
+            dataRefreshTrackingFlow.updateStatus(
+                when (output) {
+                    is Success -> {
+                        Timber.d("Full data refresh completed successfully")
+                        FinishedWithSuccess
+                    }
+                    is Failure -> {
+                        Timber.e("Data refresh failed")
+                        FinishedWithFailure
+                    }
+                },
+            )
+        }
+    }
 }

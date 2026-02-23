@@ -60,8 +60,13 @@ class HomeDataInteractor(
      * Critical data (resource types and resources) is loaded first in parallel,
      * then secondary data (users, groups, folders, metadata) is loaded.
      * This allows the UI to become interactive as soon as critical data is available.
+     *
+     * @param onCriticalDataReady Optional callback invoked when critical data has successfully loaded,
+     *                           allowing the caller to emit intermediate state (e.g., CriticalDataReady)
      */
-    suspend fun refreshAllHomeScreenData(): Output {
+    suspend fun refreshAllHomeScreenData(
+        onCriticalDataReady: (suspend () -> Unit)? = null,
+    ): Output {
         resourcesFullRefreshIdlingResource.setIdle(false)
         resourcesSnapshot.populateForCurrentAccount()
 
@@ -75,7 +80,10 @@ class HomeDataInteractor(
             return criticalDataOutput
         }
 
-        // Critical data succeeded - now load secondary data
+        // Critical data succeeded - notify callback so executor can emit CriticalDataReady state
+        onCriticalDataReady?.invoke()
+
+        // Now load secondary data
         val secondaryDataOutput = loadSecondaryData()
 
         resourcesSnapshot.clear()
