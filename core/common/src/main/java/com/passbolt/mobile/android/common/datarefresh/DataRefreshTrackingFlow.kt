@@ -22,9 +22,11 @@
  */
 package com.passbolt.mobile.android.common.datarefresh
 
+import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.CriticalDataReady
 import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.Idle
 import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.Idle.NotCompleted
 import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.InProgress
+import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.LoadingSecondary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -42,5 +44,39 @@ class DataRefreshTrackingFlow {
 
     suspend fun awaitIdle() {
         _dataRefreshStatusFlow.first { it is Idle }
+    }
+
+    /**
+     * Returns true if critical data (resource types and resources) is ready.
+     * UI can become interactive at this point.
+     */
+    fun isCriticalDataReady(): Boolean = _dataRefreshStatusFlow.value is CriticalDataReady
+
+    /**
+     * Returns true if secondary data is currently loading in the background.
+     * This is a non-blocking state where user interaction is allowed.
+     */
+    fun isLoadingSecondary(): Boolean = _dataRefreshStatusFlow.value is LoadingSecondary
+
+    /**
+     * Suspends until critical data is ready (either CriticalDataReady, LoadingSecondary, or Idle state).
+     * Use this to wait for the point where UI can become interactive.
+     */
+    suspend fun awaitCriticalDataReady() {
+        _dataRefreshStatusFlow.first { it is CriticalDataReady || it is LoadingSecondary || it is Idle }
+    }
+
+    /**
+     * Returns true if the UI should be interactive.
+     * Interactive states are: CriticalDataReady, LoadingSecondary, and Idle (except NotCompleted).
+     * During InProgress and NotCompleted states, UI should remain blocked.
+     */
+    fun isInteractive(): Boolean {
+        return when (val status = _dataRefreshStatusFlow.value) {
+            is CriticalDataReady -> true
+            is LoadingSecondary -> true
+            is Idle -> status !is NotCompleted
+            else -> false
+        }
     }
 }

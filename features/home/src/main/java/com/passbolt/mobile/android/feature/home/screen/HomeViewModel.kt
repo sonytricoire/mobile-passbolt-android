@@ -23,10 +23,12 @@
 package com.passbolt.mobile.android.feature.home.screen
 
 import androidx.lifecycle.viewModelScope
+import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.CriticalDataReady
 import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.Idle.FinishedWithFailure
 import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.Idle.FinishedWithSuccess
 import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.Idle.NotCompleted
 import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.InProgress
+import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.LoadingSecondary
 import com.passbolt.mobile.android.common.datarefresh.DataRefreshTrackingFlow
 import com.passbolt.mobile.android.core.accounts.usecase.accountdata.GetSelectedAccountDataUseCase
 import com.passbolt.mobile.android.core.commonfolders.usecase.db.GetLocalFolderDetailsUseCase
@@ -485,6 +487,23 @@ internal class HomeViewModel(
         dataRefreshTrackingFlow.dataRefreshStatusFlow.collect {
             when (it) {
                 InProgress -> updateViewState { copy(isRefreshing = true, canCreateResource = false) }
+                CriticalDataReady -> {
+                    // Critical data loaded - UI can become interactive while secondary data loads
+                    val showCreateResourceButton = shouldShowCreateButton()
+                    val homeData = getHomeData(viewState.value.homeView, viewState.value.searchQuery, showSuggestedModel)
+                    updateViewState {
+                        copy(
+                            homeData = homeData,
+                            isRefreshing = true, // Keep showing loading indicator for secondary data
+                            canCreateResource = showCreateResourceButton,
+                        )
+                    }
+                }
+                LoadingSecondary -> {
+                    // Secondary data is loading in background - UI remains interactive
+                    // Keep current state with loading indicator
+                    updateViewState { copy(isRefreshing = true) }
+                }
                 FinishedWithFailure -> {
                     emitSideEffect(ShowErrorSnackbar(FAILED_TO_REFRESH_DATA))
                     updateViewState { copy(isRefreshing = false, canCreateResource = false) }

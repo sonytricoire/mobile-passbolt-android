@@ -37,8 +37,9 @@ import com.passbolt.mobile.android.featureflags.usecase.GetFeatureFlagsUseCase
 import com.passbolt.mobile.android.metadata.interactor.MetadataKeysInteractor
 import com.passbolt.mobile.android.metadata.interactor.MetadataSessionKeysInteractor
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import timber.log.Timber
+import kotlinx.coroutines.awaitAll
 
 /**
  * Interactor that is responsible for fetching and updating the database for all home screen resources
@@ -120,40 +121,115 @@ class HomeDataInteractor(
         val foldersRefreshOutput = results[5] as FoldersInteractor.Output
         val resourcesOutput = results[6] as ResourceInteractor.Output
 
-        val saveSessionKeysOutput =
-            if (featureFlagsOutput.isV5MetadataAvailable) {
-                metadataSessionKeysInteractor.saveMetadataSessionKeysCache()
-            } else {
-                MetadataSessionKeysInteractor.Output.Success
-            }
+        // Critical data succeeded - notify callback so executor can emit CriticalDataReady state
+        onCriticalDataReady?.invoke()
+
+        // Now load secondary data
+        val secondaryDataOutput = loadSecondaryData()
 
         resourcesSnapshot.clear()
         resourcesFullRefreshIdlingResource.setIdle(true)
 
-        @Suppress("ComplexCondition")
-        return if (metadataKeysOutput is MetadataKeysInteractor.Output.Success &&
-            metadataSessionKeysOutput is MetadataSessionKeysInteractor.Output.Success &&
-            resourceTypesOutput is ResourceTypesInteractor.Output.Success &&
-            userInteractorOutput is UsersInteractor.Output.Success &&
-            groupsRefreshOutput is GroupsInteractor.Output.Success &&
-            foldersRefreshOutput is FoldersInteractor.Output.Success &&
-            resourcesOutput is ResourceInteractor.Output.Success &&
-            saveSessionKeysOutput is MetadataSessionKeysInteractor.Output.Success
-        ) {
+        // Return overall success only if both critical and secondary data succeeded
+        return if (criticalDataOutput is Output.Success && secondaryDataOutput is Output.Success) {
             Output.Success
         } else {
-            Output.Failure(
-                metadataKeysOutput.authenticationState +
-                    metadataSessionKeysOutput.authenticationState +
-                    resourceTypesOutput.authenticationState +
-                    userInteractorOutput.authenticationState +
-                    groupsRefreshOutput.authenticationState +
-                    foldersRefreshOutput.authenticationState +
-                    resourcesOutput.authenticationState +
-                    saveSessionKeysOutput.authenticationState,
-            )
+            // At this point, critical succeeded but secondary failed
+            secondaryDataOutput
         }
     }
+
+    /**
+     * Loads critical data (resource types and resources) in parallel.
+     * This data is required for the UI to become interactive.
+     */
+    internal suspend fun loadCriticalData(): Output =
+        coroutineScope {
+            Timber.d("DataRefresh: Starting parallel load of critical data (resource types + resources)")
+            val resourceTypesDeferred = async { resourceTypesInteractor.fetchAndSaveResourceTypes() }
+            val resourcesDeferred = async { resourcesInteractor.fetchAndSaveResources() }
+
+            val resourceTypesOutput = resourceTypesDeferred.await()
+            val resourcesOutput = resourcesDeferred.await()
+
+            if (resourceTypesOutput is ResourceTypesInteractor.Output.Success &&
+                resourcesOutput is ResourceInteractor.Output.Success
+            ) {
+                Timber.d("DataRefresh: Critical data loaded successfully")
+                Output.Success
+            } else {
+                Timber.e("DataRefresh: Critical data load failed")
+                Output.Failure(
+                    resourceTypesOutput.authenticationState + resourcesOutput.authenticationState,
+                )
+            }
+        }
+
+    /**
+     * Loads secondary data (users, groups, folders, metadata) in parallel.
+     * This data is loaded in the background and does not block UI interaction.
+     */
+    internal suspend fun loadSecondaryData(): Output =
+        coroutineScope {
+            Timber.d("DataRefresh: Starting parallel load of secondary data (users, groups, folders, metadata)")
+            val featureFlagsOutput = featureFlagsUseCase.execute(Unit).featureFlags
+
+            // Start all secondary data loads in parallel
+            val metadataKeysDeferred = async {
+                if (featureFlagsOutput.isV5MetadataAvailable) {
+                    metadataKeysInteractor.fetchAndSaveMetadataKeys()
+                } else {
+                    MetadataKeysInteractor.Output.Success
+                }
+            }
+            val metadataSessionKeysDeferred = async {
+                if (featureFlagsOutput.isV5MetadataAvailable) {
+                    metadataSessionKeysInteractor.fetchMetadataSessionKeys()
+                } else {
+                    MetadataSessionKeysInteractor.Output.Success
+                }
+            }
+            val usersDeferred = async { usersInteractor.fetchAndSaveUsers() }
+            val groupsDeferred = async { groupsInteractor.fetchAndSaveGroups() }
+            val foldersDeferred = async { foldersInteractor.fetchAndSaveFolders() }
+
+            // Await all results
+            val metadataKeysOutput = metadataKeysDeferred.await()
+            val metadataSessionKeysOutput = metadataSessionKeysDeferred.await()
+            val usersOutput = usersDeferred.await()
+            val groupsOutput = groupsDeferred.await()
+            val foldersOutput = foldersDeferred.await()
+
+            // Save metadata session keys cache after fetching
+            val saveSessionKeysOutput =
+                if (featureFlagsOutput.isV5MetadataAvailable) {
+                    metadataSessionKeysInteractor.saveMetadataSessionKeysCache()
+                } else {
+                    MetadataSessionKeysInteractor.Output.Success
+                }
+
+            @Suppress("ComplexCondition")
+            if (metadataKeysOutput is MetadataKeysInteractor.Output.Success &&
+                metadataSessionKeysOutput is MetadataSessionKeysInteractor.Output.Success &&
+                usersOutput is UsersInteractor.Output.Success &&
+                groupsOutput is GroupsInteractor.Output.Success &&
+                foldersOutput is FoldersInteractor.Output.Success &&
+                saveSessionKeysOutput is MetadataSessionKeysInteractor.Output.Success
+            ) {
+                Timber.d("DataRefresh: Secondary data loaded successfully")
+                Output.Success
+            } else {
+                Timber.e("DataRefresh: Secondary data load failed")
+                Output.Failure(
+                    metadataKeysOutput.authenticationState +
+                        metadataSessionKeysOutput.authenticationState +
+                        usersOutput.authenticationState +
+                        groupsOutput.authenticationState +
+                        foldersOutput.authenticationState +
+                        saveSessionKeysOutput.authenticationState,
+                )
+            }
+        }
 
     sealed class Output : AuthenticatedUseCaseOutput {
         data object Success : Output() {

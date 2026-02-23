@@ -1,0 +1,25 @@
+{
+  "active": true,
+  "spec": "003-impl-menter-un-refresh-progressif-avec-priorit-s",
+  "state": "building",
+  "subtasks": {
+    "completed": 9,
+    "total": 13,
+    "in_progress": 1,
+    "failed": 0
+  },
+  "phase": {
+    "current": "Update UI Layer",
+    "id": null,
+    "total": 3
+  },
+  "workers": {
+    "active": 0,
+    "max": 1
+  },
+  "session": {
+    "number": 10,
+    "started_at": "2026-02-23T12:49:08.525971"
+  },
+  "last_update": "2026-02-23T13:11:59.866748"
+}
