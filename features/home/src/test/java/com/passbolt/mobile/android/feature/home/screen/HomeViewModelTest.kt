@@ -31,9 +31,11 @@ import com.jayway.jsonpath.Configuration
 import com.jayway.jsonpath.Option
 import com.jayway.jsonpath.spi.json.GsonJsonProvider
 import com.jayway.jsonpath.spi.mapper.GsonMappingProvider
+import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.CriticalDataReady
 import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.Idle.FinishedWithFailure
 import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.Idle.FinishedWithSuccess
 import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.InProgress
+import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.LoadingSecondary
 import com.passbolt.mobile.android.common.datarefresh.DataRefreshTrackingFlow
 import com.passbolt.mobile.android.commontest.TestCoroutineLaunchContext
 import com.passbolt.mobile.android.core.accounts.usecase.accountdata.GetSelectedAccountDataUseCase
@@ -548,6 +550,87 @@ class HomeViewModelTest : KoinTest {
                 assertIs<InitiateDataRefresh>(awaitItem())
             }
         }
+
+    @Test
+    fun `CriticalDataReady state makes UI interactive with loading indicator`() = runTest {
+        // Given
+        mockHomeData()
+        mockCanCreateResource(true)
+
+        // When - Initialize and emit CriticalDataReady
+        viewModel.handleIntent(Initialize)
+        dataRefreshTrackingFlow.updateStatus(CriticalDataReady)
+        advanceUntilIdle()
+
+        // Then
+        viewModel.viewState.test {
+            val state = awaitItem()
+            assertThat(state.isRefreshing).isTrue() // Loading indicator still shown
+            assertThat(state.canCreateResource).isTrue() // UI is interactive
+            assertThat(state.homeData).isNotEqualTo(HomeData.Empty) // Data loaded
+        }
+    }
+
+    @Test
+    fun `LoadingSecondary state keeps loading indicator shown`() = runTest {
+        // When - Emit LoadingSecondary
+        viewModel.handleIntent(Initialize)
+        dataRefreshTrackingFlow.updateStatus(LoadingSecondary)
+        advanceUntilIdle()
+
+        // Then
+        viewModel.viewState.test {
+            val state = awaitItem()
+            assertThat(state.isRefreshing).isTrue() // Loading indicator shown
+            // UI remains interactive (canCreateResource not changed)
+        }
+    }
+
+    @Test
+    fun `progressive loading state transitions work correctly`() = runTest {
+        // Given
+        mockHomeData()
+        mockCanCreateResource(true)
+
+        // When - Initialize
+        viewModel.handleIntent(Initialize)
+        advanceUntilIdle()
+
+        // InProgress state
+        dataRefreshTrackingFlow.updateStatus(InProgress)
+        advanceUntilIdle()
+        viewModel.viewState.test {
+            val state = awaitItem()
+            assertThat(state.isRefreshing).isTrue()
+            assertThat(state.canCreateResource).isFalse()
+        }
+
+        // CriticalDataReady state
+        dataRefreshTrackingFlow.updateStatus(CriticalDataReady)
+        advanceUntilIdle()
+        viewModel.viewState.test {
+            val state = awaitItem()
+            assertThat(state.isRefreshing).isTrue() // Still loading secondary
+            assertThat(state.canCreateResource).isTrue() // UI unlocked
+        }
+
+        // LoadingSecondary state
+        dataRefreshTrackingFlow.updateStatus(LoadingSecondary)
+        advanceUntilIdle()
+        viewModel.viewState.test {
+            val state = awaitItem()
+            assertThat(state.isRefreshing).isTrue()
+        }
+
+        // FinishedWithSuccess state
+        dataRefreshTrackingFlow.updateStatus(FinishedWithSuccess)
+        advanceUntilIdle()
+        viewModel.viewState.test {
+            val state = awaitItem()
+            assertThat(state.isRefreshing).isFalse()
+            assertThat(state.canCreateResource).isTrue()
+        }
+    }
 
     private fun mockCanCreateResource(canCreate: Boolean) {
         get<CanCreateResourceUseCase>().stub {
