@@ -36,6 +36,8 @@ import com.passbolt.mobile.android.database.snapshot.ResourcesSnapshot
 import com.passbolt.mobile.android.featureflags.usecase.GetFeatureFlagsUseCase
 import com.passbolt.mobile.android.metadata.interactor.MetadataKeysInteractor
 import com.passbolt.mobile.android.metadata.interactor.MetadataSessionKeysInteractor
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 /**
  * Interactor that is responsible for fetching and updating the database for all home screen resources
@@ -112,6 +114,25 @@ class HomeDataInteractor(
             )
         }
     }
+
+    private suspend fun loadCriticalData(): Output =
+        coroutineScope {
+            val resourceTypesDeferred = async { resourceTypesInteractor.fetchAndSaveResourceTypes() }
+            val resourcesDeferred = async { resourcesInteractor.fetchAndSaveResources() }
+
+            val resourceTypesOutput = resourceTypesDeferred.await()
+            val resourcesOutput = resourcesDeferred.await()
+
+            if (resourceTypesOutput is ResourceTypesInteractor.Output.Success &&
+                resourcesOutput is ResourceInteractor.Output.Success
+            ) {
+                Output.Success
+            } else {
+                Output.Failure(
+                    resourceTypesOutput.authenticationState + resourcesOutput.authenticationState,
+                )
+            }
+        }
 
     sealed class Output : AuthenticatedUseCaseOutput {
         data object Success : Output() {
