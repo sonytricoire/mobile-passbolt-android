@@ -38,6 +38,7 @@ import com.passbolt.mobile.android.metadata.interactor.MetadataKeysInteractor
 import com.passbolt.mobile.android.metadata.interactor.MetadataSessionKeysInteractor
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import timber.log.Timber
 
 /**
  * Interactor that is responsible for fetching and updating the database for all home screen resources
@@ -104,6 +105,7 @@ class HomeDataInteractor(
      */
     internal suspend fun loadCriticalData(): Output =
         coroutineScope {
+            Timber.d("DataRefresh: Starting parallel load of critical data (resource types + resources)")
             val resourceTypesDeferred = async { resourceTypesInteractor.fetchAndSaveResourceTypes() }
             val resourcesDeferred = async { resourcesInteractor.fetchAndSaveResources() }
 
@@ -113,8 +115,10 @@ class HomeDataInteractor(
             if (resourceTypesOutput is ResourceTypesInteractor.Output.Success &&
                 resourcesOutput is ResourceInteractor.Output.Success
             ) {
+                Timber.d("DataRefresh: Critical data loaded successfully")
                 Output.Success
             } else {
+                Timber.e("DataRefresh: Critical data load failed")
                 Output.Failure(
                     resourceTypesOutput.authenticationState + resourcesOutput.authenticationState,
                 )
@@ -127,6 +131,7 @@ class HomeDataInteractor(
      */
     internal suspend fun loadSecondaryData(): Output =
         coroutineScope {
+            Timber.d("DataRefresh: Starting parallel load of secondary data (users, groups, folders, metadata)")
             val featureFlagsOutput = featureFlagsUseCase.execute(Unit).featureFlags
 
             // Start all secondary data loads in parallel
@@ -171,8 +176,10 @@ class HomeDataInteractor(
                 foldersOutput is FoldersInteractor.Output.Success &&
                 saveSessionKeysOutput is MetadataSessionKeysInteractor.Output.Success
             ) {
+                Timber.d("DataRefresh: Secondary data loaded successfully")
                 Output.Success
             } else {
+                Timber.e("DataRefresh: Secondary data load failed")
                 Output.Failure(
                     metadataKeysOutput.authenticationState +
                         metadataSessionKeysOutput.authenticationState +
