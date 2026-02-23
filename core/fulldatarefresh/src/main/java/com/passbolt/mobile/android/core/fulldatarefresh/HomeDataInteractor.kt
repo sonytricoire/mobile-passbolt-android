@@ -55,63 +55,38 @@ class HomeDataInteractor(
     private val resourcesFullRefreshIdlingResource: ResourcesFullRefreshIdlingResource,
     private val resourcesSnapshot: ResourcesSnapshot,
 ) {
-    // TODO start multiple async where possible
+    /**
+     * Refreshes all home screen data using progressive loading.
+     * Critical data (resource types and resources) is loaded first in parallel,
+     * then secondary data (users, groups, folders, metadata) is loaded.
+     * This allows the UI to become interactive as soon as critical data is available.
+     */
     suspend fun refreshAllHomeScreenData(): Output {
         resourcesFullRefreshIdlingResource.setIdle(false)
         resourcesSnapshot.populateForCurrentAccount()
 
-        val featureFlagsOutput = featureFlagsUseCase.execute(Unit).featureFlags
-        val metadataKeysOutput =
-            if (featureFlagsOutput.isV5MetadataAvailable) {
-                metadataKeysInteractor.fetchAndSaveMetadataKeys()
-            } else {
-                MetadataKeysInteractor.Output.Success
-            }
-        val metadataSessionKeysOutput =
-            if (featureFlagsOutput.isV5MetadataAvailable) {
-                metadataSessionKeysInteractor.fetchMetadataSessionKeys()
-            } else {
-                MetadataSessionKeysInteractor.Output.Success
-            }
+        // Load critical data first (resource types and resources in parallel)
+        val criticalDataOutput = loadCriticalData()
 
-        val resourceTypesOutput = resourceTypesInteractor.fetchAndSaveResourceTypes()
-        val userInteractorOutput = usersInteractor.fetchAndSaveUsers()
-        val groupsRefreshOutput = groupsInteractor.fetchAndSaveGroups()
-        val foldersRefreshOutput = foldersInteractor.fetchAndSaveFolders()
-        val resourcesOutput = resourcesInteractor.fetchAndSaveResources()
+        // If critical data fails, cleanup and return failure immediately
+        if (criticalDataOutput is Output.Failure) {
+            resourcesSnapshot.clear()
+            resourcesFullRefreshIdlingResource.setIdle(true)
+            return criticalDataOutput
+        }
 
-        val saveSessionKeysOutput =
-            if (featureFlagsOutput.isV5MetadataAvailable) {
-                metadataSessionKeysInteractor.saveMetadataSessionKeysCache()
-            } else {
-                MetadataSessionKeysInteractor.Output.Success
-            }
+        // Critical data succeeded - now load secondary data
+        val secondaryDataOutput = loadSecondaryData()
 
         resourcesSnapshot.clear()
         resourcesFullRefreshIdlingResource.setIdle(true)
 
-        @Suppress("ComplexCondition")
-        return if (metadataKeysOutput is MetadataKeysInteractor.Output.Success &&
-            metadataSessionKeysOutput is MetadataSessionKeysInteractor.Output.Success &&
-            resourceTypesOutput is ResourceTypesInteractor.Output.Success &&
-            userInteractorOutput is UsersInteractor.Output.Success &&
-            groupsRefreshOutput is GroupsInteractor.Output.Success &&
-            foldersRefreshOutput is FoldersInteractor.Output.Success &&
-            resourcesOutput is ResourceInteractor.Output.Success &&
-            saveSessionKeysOutput is MetadataSessionKeysInteractor.Output.Success
-        ) {
+        // Return overall success only if both critical and secondary data succeeded
+        return if (criticalDataOutput is Output.Success && secondaryDataOutput is Output.Success) {
             Output.Success
         } else {
-            Output.Failure(
-                metadataKeysOutput.authenticationState +
-                    metadataSessionKeysOutput.authenticationState +
-                    resourceTypesOutput.authenticationState +
-                    userInteractorOutput.authenticationState +
-                    groupsRefreshOutput.authenticationState +
-                    foldersRefreshOutput.authenticationState +
-                    resourcesOutput.authenticationState +
-                    saveSessionKeysOutput.authenticationState,
-            )
+            // At this point, critical succeeded but secondary failed
+            secondaryDataOutput
         }
     }
 
