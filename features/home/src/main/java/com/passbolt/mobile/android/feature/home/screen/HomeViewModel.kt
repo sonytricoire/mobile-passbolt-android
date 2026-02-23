@@ -368,13 +368,7 @@ internal class HomeViewModel(
     private fun searchEndIconAction() {
         when (viewState.value.searchInputEndIconMode) {
             AVATAR -> {
-                viewModelScope.launch(coroutineLaunchContext.io) {
-                    if (dataRefreshTrackingFlow.isInProgress()) {
-                        emitSideEffect(ShowToast(WAIT_FOR_DATA_REFRESH_FINISH))
-                        dataRefreshTrackingFlow.awaitIdle()
-                    }
-                    updateViewState { copy(showAccountSwitchBottomSheet = true) }
-                }
+                updateViewState { copy(showAccountSwitchBottomSheet = true) }
             }
             CLEAR -> {
                 searchQueryChanged("")
