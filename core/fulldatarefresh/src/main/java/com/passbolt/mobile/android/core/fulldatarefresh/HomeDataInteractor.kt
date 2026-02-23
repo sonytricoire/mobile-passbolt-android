@@ -134,6 +134,65 @@ class HomeDataInteractor(
             }
         }
 
+    private suspend fun loadSecondaryData(): Output =
+        coroutineScope {
+            val featureFlagsOutput = featureFlagsUseCase.execute(Unit).featureFlags
+
+            // Start all secondary data loads in parallel
+            val metadataKeysDeferred = async {
+                if (featureFlagsOutput.isV5MetadataAvailable) {
+                    metadataKeysInteractor.fetchAndSaveMetadataKeys()
+                } else {
+                    MetadataKeysInteractor.Output.Success
+                }
+            }
+            val metadataSessionKeysDeferred = async {
+                if (featureFlagsOutput.isV5MetadataAvailable) {
+                    metadataSessionKeysInteractor.fetchMetadataSessionKeys()
+                } else {
+                    MetadataSessionKeysInteractor.Output.Success
+                }
+            }
+            val usersDeferred = async { usersInteractor.fetchAndSaveUsers() }
+            val groupsDeferred = async { groupsInteractor.fetchAndSaveGroups() }
+            val foldersDeferred = async { foldersInteractor.fetchAndSaveFolders() }
+
+            // Await all results
+            val metadataKeysOutput = metadataKeysDeferred.await()
+            val metadataSessionKeysOutput = metadataSessionKeysDeferred.await()
+            val usersOutput = usersDeferred.await()
+            val groupsOutput = groupsDeferred.await()
+            val foldersOutput = foldersDeferred.await()
+
+            // Save metadata session keys cache after fetching
+            val saveSessionKeysOutput =
+                if (featureFlagsOutput.isV5MetadataAvailable) {
+                    metadataSessionKeysInteractor.saveMetadataSessionKeysCache()
+                } else {
+                    MetadataSessionKeysInteractor.Output.Success
+                }
+
+            @Suppress("ComplexCondition")
+            if (metadataKeysOutput is MetadataKeysInteractor.Output.Success &&
+                metadataSessionKeysOutput is MetadataSessionKeysInteractor.Output.Success &&
+                usersOutput is UsersInteractor.Output.Success &&
+                groupsOutput is GroupsInteractor.Output.Success &&
+                foldersOutput is FoldersInteractor.Output.Success &&
+                saveSessionKeysOutput is MetadataSessionKeysInteractor.Output.Success
+            ) {
+                Output.Success
+            } else {
+                Output.Failure(
+                    metadataKeysOutput.authenticationState +
+                        metadataSessionKeysOutput.authenticationState +
+                        usersOutput.authenticationState +
+                        groupsOutput.authenticationState +
+                        foldersOutput.authenticationState +
+                        saveSessionKeysOutput.authenticationState,
+                )
+            }
+        }
+
     sealed class Output : AuthenticatedUseCaseOutput {
         data object Success : Output() {
             override val authenticationState: AuthenticationState = AuthenticationState.Authenticated
