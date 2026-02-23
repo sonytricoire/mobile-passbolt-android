@@ -36,4 +36,16 @@ sealed class DataRefreshStatus {
     }
 
     data object InProgress : DataRefreshStatus()
+
+    /**
+     * Indicates that critical data (resource types and resources) has been loaded.
+     * UI can become interactive at this point while secondary data loads in background.
+     */
+    data object CriticalDataReady : DataRefreshStatus()
+
+    /**
+     * Indicates that secondary data (users, groups, folders, metadata) is currently loading
+     * in the background. This state is non-blocking and allows user interaction.
+     */
+    data object LoadingSecondary : DataRefreshStatus()
 }
