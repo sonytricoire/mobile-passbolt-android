@@ -1,8 +1,10 @@
 package com.passbolt.mobile.android.core.fulldatarefresh
 
+import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.CriticalDataReady
 import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.Idle.FinishedWithFailure
 import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.Idle.FinishedWithSuccess
 import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.InProgress
+import com.passbolt.mobile.android.common.datarefresh.DataRefreshStatus.LoadingSecondary
 import com.passbolt.mobile.android.common.datarefresh.DataRefreshTrackingFlow
 import com.passbolt.mobile.android.core.fulldatarefresh.HomeDataInteractor.Output.Failure
 import com.passbolt.mobile.android.core.fulldatarefresh.HomeDataInteractor.Output.Success
@@ -49,15 +51,45 @@ class FullDataRefreshExecutor(
             Timber.d("Full data refresh initiated")
             if (!dataRefreshTrackingFlow.isInProgress()) {
                 dataRefreshTrackingFlow.updateStatus(InProgress)
-                val output =
+
+                // Load critical data first (resource types and resources)
+                Timber.d("Loading critical data (resource types and resources)")
+                val criticalOutput =
                     runAuthenticatedOperation {
-                        homeDataInteractor.refreshAllHomeScreenData()
+                        homeDataInteractor.loadCriticalData()
                     }
 
+                // If critical data fails, stop and report failure
+                if (criticalOutput is Failure) {
+                    Timber.e("Critical data refresh failed")
+                    dataRefreshTrackingFlow.updateStatus(FinishedWithFailure)
+                    return@launch
+                }
+
+                // Critical data succeeded - emit CriticalDataReady so UI can become interactive
+                Timber.d("Critical data refresh completed - UI can become interactive")
+                dataRefreshTrackingFlow.updateStatus(CriticalDataReady)
+
+                // Now load secondary data in background
+                Timber.d("Loading secondary data in background")
+                dataRefreshTrackingFlow.updateStatus(LoadingSecondary)
+
+                val secondaryOutput =
+                    runAuthenticatedOperation {
+                        homeDataInteractor.loadSecondaryData()
+                    }
+
+                // Update final status based on secondary data result
                 dataRefreshTrackingFlow.updateStatus(
-                    when (output) {
-                        is Success -> FinishedWithSuccess
-                        is Failure -> FinishedWithFailure
+                    when (secondaryOutput) {
+                        is Success -> {
+                            Timber.d("Full data refresh completed successfully")
+                            FinishedWithSuccess
+                        }
+                        is Failure -> {
+                            Timber.e("Secondary data refresh failed")
+                            FinishedWithFailure
+                        }
                     },
                 )
             }
@@ -68,15 +100,45 @@ class FullDataRefreshExecutor(
         Timber.d("Full data refresh initiated")
         if (!dataRefreshTrackingFlow.isInProgress()) {
             dataRefreshTrackingFlow.updateStatus(InProgress)
-            val output =
+
+            // Load critical data first (resource types and resources)
+            Timber.d("Loading critical data (resource types and resources)")
+            val criticalOutput =
                 runAuthenticatedOperation {
-                    homeDataInteractor.refreshAllHomeScreenData()
+                    homeDataInteractor.loadCriticalData()
                 }
 
+            // If critical data fails, stop and report failure
+            if (criticalOutput is Failure) {
+                Timber.e("Critical data refresh failed")
+                dataRefreshTrackingFlow.updateStatus(FinishedWithFailure)
+                return
+            }
+
+            // Critical data succeeded - emit CriticalDataReady so UI can become interactive
+            Timber.d("Critical data refresh completed - UI can become interactive")
+            dataRefreshTrackingFlow.updateStatus(CriticalDataReady)
+
+            // Now load secondary data in background
+            Timber.d("Loading secondary data in background")
+            dataRefreshTrackingFlow.updateStatus(LoadingSecondary)
+
+            val secondaryOutput =
+                runAuthenticatedOperation {
+                    homeDataInteractor.loadSecondaryData()
+                }
+
+            // Update final status based on secondary data result
             dataRefreshTrackingFlow.updateStatus(
-                when (output) {
-                    is Success -> FinishedWithSuccess
-                    is Failure -> FinishedWithFailure
+                when (secondaryOutput) {
+                    is Success -> {
+                        Timber.d("Full data refresh completed successfully")
+                        FinishedWithSuccess
+                    }
+                    is Failure -> {
+                        Timber.e("Secondary data refresh failed")
+                        FinishedWithFailure
+                    }
                 },
             )
         }

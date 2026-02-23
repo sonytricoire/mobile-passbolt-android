@@ -90,7 +90,11 @@ class HomeDataInteractor(
         }
     }
 
-    private suspend fun loadCriticalData(): Output =
+    /**
+     * Loads critical data (resource types and resources) in parallel.
+     * This data is required for the UI to become interactive.
+     */
+    internal suspend fun loadCriticalData(): Output =
         coroutineScope {
             val resourceTypesDeferred = async { resourceTypesInteractor.fetchAndSaveResourceTypes() }
             val resourcesDeferred = async { resourcesInteractor.fetchAndSaveResources() }
@@ -109,7 +113,11 @@ class HomeDataInteractor(
             }
         }
 
-    private suspend fun loadSecondaryData(): Output =
+    /**
+     * Loads secondary data (users, groups, folders, metadata) in parallel.
+     * This data is loaded in the background and does not block UI interaction.
+     */
+    internal suspend fun loadSecondaryData(): Output =
         coroutineScope {
             val featureFlagsOutput = featureFlagsUseCase.execute(Unit).featureFlags
 
