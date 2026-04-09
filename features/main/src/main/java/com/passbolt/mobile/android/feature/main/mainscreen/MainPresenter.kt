@@ -25,7 +25,6 @@ class MainPresenter(
     override fun attach(view: MainContract.View) {
         super.attach(view)
         setupBottomNavigation()
-        performFullDataRefresh()
         if (encouragementsInteractor.shouldShowChromeNativeAutofillEncouragement()) {
             view.showChromeNativeAutofillEncouragement()
         }
