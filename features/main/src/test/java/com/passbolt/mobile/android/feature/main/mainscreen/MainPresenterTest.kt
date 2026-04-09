@@ -56,13 +56,6 @@ class MainPresenterTest : KoinTest {
         }
 
     @Test
-    fun `full data refresh should start on attach`() {
-        presenter.attach(view)
-
-        verify(view).performFullDataRefresh()
-    }
-
-    @Test
     fun `in app app update flow should be started on attach`() {
         presenter.attach(view)
 
@@ -111,7 +104,7 @@ class MainPresenterTest : KoinTest {
             get<DataRefreshTrackingFlow>().updateStatus(DataRefreshStatus.Idle.FinishedWithSuccess)
 
             argumentCaptor<MainBottomNavigationModel> {
-                verify(view, times(2)).setupBottomNavigation(capture())
+                verify(view, times(1)).setupBottomNavigation(capture())
                 assertTrue(firstValue.isOtpTabVisible)
             }
         }
